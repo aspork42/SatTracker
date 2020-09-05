@@ -10,6 +10,8 @@ import paho.mqtt.client as mqtt
 
 #  Replace the next 7 values with ones appropriate for your needs.
 
+# Also update your MQTT broker ID listed down below.
+
 API_Key = "nnnnnn-vvvvvv-dddddd-wwww"  # Create free account with N2YO.com and get an API key
 NoradID = [28654, 41287, 33591, 25338, 90864]  # Norad ID of satellites wanted to be observed
 observer_lat = 43.42528  # Float.  Observer's latitude (decimal degrees format)
