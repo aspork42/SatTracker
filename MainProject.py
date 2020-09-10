@@ -8,6 +8,9 @@ from datetime import datetime
 from dateutil import tz  # used for converting timezones http://niemeyer.net/python-dateutil
 import paho.mqtt.client as mqtt  # https://pypi.org/project/paho-mqtt/
 
+from influxdb import InfluxDBClient
+useInflux = True
+useMqtt = True
 
 #  Replace the next 7 values with ones appropriate for your needs.
 
@@ -26,13 +29,18 @@ def on_connect(client, userdata, flags, rc):
     print("Connected to MQTT Broker with result code "+str(rc))
 
 
-client = mqtt.Client()
-client.on_connect = on_connect
+client_mqtt = mqtt.Client()
 
-print("Connecting to MQTT Broker... ")
-client.connect("192.168.n.n", 1883, 60)
+if useMqtt:
+    client_mqtt.on_connect = on_connect
+    print("Connecting to MQTT Broker... ")
+    client_mqtt.connect("192.168.n.n", 1883, 60)
+    client_mqtt.loop_start()  # background thread to maintain MQTT connection.
 
-client.loop_start()  # background thread to maintain MQTT connection.
+client_Influx = InfluxDBClient('localhost', 8086, 'root', 'root', 'myDB')
+
+if useInflux:
+    #client_Influx.create_database('myDB') # Uncomment if database needs to be created
 
 BaseURL = "https://www.n2yo.com/rest/v1/satellite/radiopasses"
 
@@ -66,31 +74,38 @@ for n in NoradID:
                + '/' + str(days) \
                + '/' + str(min_elevation)
 
-    r = requests.get(MyURL, PARAMS)
+    r = requests.get(MyURL, PARAMS)  # This line requests the actual data from N2YO.
+
     print(r.url)  # print out the URL to use (debug)
     data = r.json()  # var to hold the returned data
     print(data)
-    if 'passes' not in data:
-        client.publish("Sat/" + str(n) + "/NextPass",
-                       "Unknown NoradID or farther than " + str(days) +
-                       " days in the future.")
+    if useMqtt:
+        if 'passes' not in data:
+            client_mqtt.publish("Sat/" + str(n) + "/NextPass",
+                           "Unknown NoradID or farther than " + str(days) +
+                           " days in the future.")
 
-    else:
-        client.publish("Sat/" + str(n) + "/NextPass", convertTime(data['passes'][0]['startUTC']))
+        else:
+            client_mqtt.publish("Sat/" + str(n) + "/NextPass", convertTime(data['passes'][0]['startUTC']))
 
-        client.publish("Sat/" + str(n) + "/Name", data['info']['satname'])
-        client.publish("Sat/" + str(n) + "/SatID", data['info']['satid'])
-        client.publish("Sat/" + str(n) + "/PassesCount", data['info']['passescount'])
-        client.publish("Sat/" + str(n) + "/startAZ", data['passes'][0]['startAz'])
-        client.publish("Sat/" + str(n) + "/startAZCompass", data['passes'][0]['startAzCompass'])
-        client.publish("Sat/" + str(n) + "/MaxAz", data['passes'][0]['maxAz'])
-        client.publish("Sat/" + str(n) + "/MaxAZCompass", data['passes'][0]['maxAzCompass'])
-        client.publish("Sat/" + str(n) + "/MaxElevation", data['passes'][0]['maxEl'])
-        client.publish("Sat/" + str(n) + "/MaxUTC", convertTime(data['passes'][0]['maxUTC']))
-        client.publish("Sat/" + str(n) + "/endAz", data['passes'][0]['endAz'])
-        client.publish("Sat/" + str(n) + "/endAzCompass", data['passes'][0]['endAzCompass'])
-        client.publish("Sat/" + str(n) + "/endUTC", convertTime(data['passes'][0]['endUTC']))
+            client_mqtt.publish("Sat/" + str(n) + "/Name", data['info']['satname'])
+            client_mqtt.publish("Sat/" + str(n) + "/SatID", data['info']['satid'])
+            client_mqtt.publish("Sat/" + str(n) + "/PassesCount", data['info']['passescount'])
+            client_mqtt.publish("Sat/" + str(n) + "/startAZ", data['passes'][0]['startAz'])
+            client_mqtt.publish("Sat/" + str(n) + "/startAZCompass", data['passes'][0]['startAzCompass'])
+            client_mqtt.publish("Sat/" + str(n) + "/MaxAz", data['passes'][0]['maxAz'])
+            client_mqtt.publish("Sat/" + str(n) + "/MaxAZCompass", data['passes'][0]['maxAzCompass'])
+            client_mqtt.publish("Sat/" + str(n) + "/MaxElevation", data['passes'][0]['maxEl'])
+            client_mqtt.publish("Sat/" + str(n) + "/MaxUTC", convertTime(data['passes'][0]['maxUTC']))
+            client_mqtt.publish("Sat/" + str(n) + "/endAz", data['passes'][0]['endAz'])
+            client_mqtt.publish("Sat/" + str(n) + "/endAzCompass", data['passes'][0]['endAzCompass'])
+            client_mqtt.publish("Sat/" + str(n) + "/endUTC", convertTime(data['passes'][0]['endUTC']))
+
+    if useInflux:
+        client_Influx.write_points(data)
+
 
 # end of for-loop
+if useMqtt:
+    client_mqtt.loop_stop()  # stop the MQTT background thread
 
-client.loop_stop()  # stop the MQTT background thread
